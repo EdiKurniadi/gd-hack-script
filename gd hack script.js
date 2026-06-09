@@ -1,41 +1,60 @@
 (function() {
-    // 1. Meminta input URL
-    let inputUrl = prompt("Paste URL 'viewer/img' di sini:", "");
-    if (!inputUrl) return;
+    // 1. Fitur Auto-Detect URL Gambar Dokumen
+    let rawUrl = "";
+    let allImages = document.querySelectorAll('img');
     
-    let rawUrl = inputUrl.trim();
+    for (let i = 0; i < allImages.length; i++) {
+        let src = allImages[i].src;
+        // Deteksi pola URL dari elemen gambar
+        if (src && (src.includes('viewer/img') || src.includes('viewer/png') || src.includes('img?') || src.includes('page='))) {
+            rawUrl = src;
+            console.log("URL berhasil dideteksi otomatis:", rawUrl);
+            break;
+        }
+    }
+
+    // Jika gagal deteksi otomatis
+    if (!rawUrl) {
+        let inputUrl = prompt("Gagal deteksi otomatis. Paste URL gambar (contoh: yang mengandung 'img?' atau 'page=') dari tab Network/Elements di sini:", "");
+        if (!inputUrl) return;
+        rawUrl = inputUrl.trim();
+    }
 
     // 2. Meminta jumlah halaman
-    let totalPages = parseInt(prompt("Berapa jumlah halaman yang ingin ditampilkan?", "10"));
+    let totalPages = parseInt(prompt("Berapa jumlah halaman yang ingin diekstrak?", "10"));
     if (isNaN(totalPages) || totalPages <= 0) return;
 
     try {
+        // 3. Manipulasi URL (Mengganti Halaman & Memaksa Resolusi HD)
         let baseUrl = rawUrl.replace(/page=\d+/, 'page=__PAGE__');
         if (!baseUrl.includes('page=__PAGE__')) {
-            baseUrl += '&page=__PAGE__';
+            let separator = baseUrl.includes('?') ? '&' : '?';
+            baseUrl += separator + 'page=__PAGE__';
+        }
+        
+        // --- FITUR BARU: Auto-HD ---
+        // Jika URL adalah thumbnail (misal w=240), paksa menjadi lebar 2500px agar PDF tajam
+        if (baseUrl.includes('w=')) {
+            baseUrl = baseUrl.replace(/w=\d+/, 'w=2500');
+        } else {
+            // Jika tidak ada parameter width, tambahkan untuk berjaga-jaga
+            baseUrl += '&w=2500';
         }
 
-        // 3. Membuat CSS Khusus untuk Mode Print (Save as PDF)
+        // 4. Membuat CSS Khusus untuk Mode Print (Save as PDF)
         let printStyle = document.createElement('style');
         printStyle.id = 'gdrive-print-style';
         
         let cssRules = `
             @media print {
-                /* Sembunyikan elemen asli website di latar belakang */
                 body > *:not(#gdrive-extractor-overlay) { display: none !important; }
-                
-                /* Reset gaya overlay agar cocok untuk kertas PDF */
                 #gdrive-extractor-overlay { 
                     position: static !important; 
                     overflow: visible !important; 
                     padding: 0 !important; 
                     background: white !important; 
                 }
-                
-                /* Sembunyikan tombol-tombol saat dicetak */
                 .no-print { display: none !important; }
-                
-                /* Atur setiap gambar agar pas 1 halaman penuh (A4) */
                 .img-container { 
                     page-break-after: always; 
                     page-break-inside: avoid; 
@@ -50,12 +69,10 @@
                 }
             }
         `;
-        
-        // PERBAIKAN: Menggunakan createTextNode untuk bypass error TrustedHTML
         printStyle.appendChild(document.createTextNode(cssRules));
         document.head.appendChild(printStyle);
 
-        // 4. Membuat Layar Overlay
+        // 5. Membuat Layar Overlay
         let overlay = document.createElement('div');
         overlay.id = 'gdrive-extractor-overlay';
         overlay.style.position = 'fixed';
@@ -71,9 +88,9 @@
         overlay.style.fontFamily = 'Segoe UI, Tahoma, sans-serif';
         overlay.style.textAlign = 'center';
 
-        // 5. Membuat Tombol Simpan PDF (Kiri Atas)
+        // 6. Membuat Tombol Simpan PDF
         let pdfBtn = document.createElement('button');
-        pdfBtn.innerText = "📄 Simpan sebagai PDF";
+        pdfBtn.textContent = "📄 Simpan sebagai PDF";
         pdfBtn.className = "no-print";
         pdfBtn.style.position = 'fixed';
         pdfBtn.style.top = '20px';
@@ -89,9 +106,9 @@
         pdfBtn.onclick = function() { window.print(); };
         overlay.appendChild(pdfBtn);
 
-        // 6. Membuat Tombol Tutup (Kanan Atas)
+        // 7. Membuat Tombol Tutup
         let closeBtn = document.createElement('button');
-        closeBtn.innerText = "✕ Tutup Tampilan";
+        closeBtn.textContent = "✕ Tutup Tampilan";
         closeBtn.className = "no-print";
         closeBtn.style.position = 'fixed';
         closeBtn.style.top = '20px';
@@ -114,14 +131,13 @@
 
         // Membuat Judul Layar
         let title = document.createElement('h2');
-        // PERBAIKAN: Menggunakan textContent alih-alih innerText untuk keamanan konsistensi
         title.textContent = "Hasil Ekstraksi Halaman Dokumen";
         title.className = "no-print";
         title.style.color = '#333';
         title.style.marginBottom = '40px';
         overlay.appendChild(title);
 
-        // 7. Proses melakukan perulangan Gambar
+        // 8. Proses melakukan perulangan Gambar
         for (let i = 0; i < totalPages; i++) {
             let pageUrl = baseUrl.replace('__PAGE__', i);
             
@@ -132,7 +148,7 @@
             container.style.width = '100%';
             
             let label = document.createElement('p');
-            label.textContent = `Halaman ${i + 1}`; // PERBAIKAN: Gunakan textContent
+            label.textContent = `Halaman ${i + 1}`;
             label.className = "no-print";
             label.style.color = '#666';
             label.style.fontWeight = 'bold';
@@ -141,7 +157,7 @@
             let img = document.createElement('img');
             img.src = pageUrl;
             img.style.maxWidth = '100%';
-            img.style.width = '850px';
+            img.style.width = '850px'; 
             img.style.background = 'white';
             img.style.border = '1px solid #ccc';
             img.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
@@ -153,7 +169,6 @@
             overlay.appendChild(container);
         }
 
-        // Masukkan seluruh layar overlay ke dalam browser
         document.body.appendChild(overlay);
 
     } catch (error) {
