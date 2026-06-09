@@ -1,11 +1,12 @@
 (function() {
-    // 1. Fitur Auto-Detect URL Gambar Dokumen
+    // ==========================================
+    // 1. FITUR AUTO-DETECT URL GAMBAR DOKUMEN
+    // ==========================================
     let rawUrl = "";
     let allImages = document.querySelectorAll('img');
     
     for (let i = 0; i < allImages.length; i++) {
         let src = allImages[i].src;
-        // Deteksi pola URL dari elemen gambar
         if (src && (src.includes('viewer/img') || src.includes('viewer/png') || src.includes('img?') || src.includes('page='))) {
             rawUrl = src;
             console.log("URL berhasil dideteksi otomatis:", rawUrl);
@@ -13,35 +14,76 @@
         }
     }
 
-    // Jika gagal deteksi otomatis
     if (!rawUrl) {
         let inputUrl = prompt("Gagal deteksi otomatis. Paste URL gambar (contoh: yang mengandung 'img?' atau 'page=') dari tab Network/Elements di sini:", "");
         if (!inputUrl) return;
         rawUrl = inputUrl.trim();
     }
 
-    // 2. Meminta jumlah halaman
-    let totalPages = parseInt(prompt("Berapa jumlah halaman yang ingin diekstrak?", "10"));
+    // ==========================================
+    // 2. FITUR AUTO-DETECT JUMLAH HALAMAN
+    // ==========================================
+    let totalPages = 0;
+
+    // Metode A: Mencari elemen span yang menampung total halaman (jsname="Dt5gRb")
+    let spanTotalElement = document.querySelector('span[jsname="Dt5gRb"]');
+    if (spanTotalElement && spanTotalElement.textContent) {
+        let parsedNum = parseInt(spanTotalElement.textContent.trim());
+        if (!isNaN(parsedNum) && parsedNum > 0) {
+            totalPages = parsedNum;
+            console.log("Jumlah halaman dideteksi dari elemen Span:", totalPages);
+        }
+    }
+
+    // Metode B: Jika Metode A gagal, cari angka dari input aria-label (misal: "Halaman 2 dari 15")
+    if (totalPages === 0) {
+        let inputs = document.querySelectorAll('input[type="text"][aria-label]');
+        for (let i = 0; i < inputs.length; i++) {
+            let label = inputs[i].getAttribute('aria-label');
+            // Regex mencari semua kumpulan angka di dalam teks
+            let numbersInLabel = label.match(/\d+/g); 
+            // Jika ada 2 angka atau lebih (misal [2, 15]), ambil angka yang paling akhir
+            if (numbersInLabel && numbersInLabel.length >= 2) {
+                let parsedNum = parseInt(numbersInLabel[numbersInLabel.length - 1]);
+                if (!isNaN(parsedNum) && parsedNum > 0) {
+                    totalPages = parsedNum;
+                    console.log("Jumlah halaman dideteksi dari aria-label:", totalPages);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Metode C (Fallback): Jika struktur web berubah total, tanyakan secara manual
+    if (totalPages === 0) {
+        let inputNum = prompt("Gagal deteksi jumlah halaman otomatis. Berapa jumlah halaman dokumen ini?", "10");
+        if (!inputNum) return; // Berhenti jika user klik Batal/Cancel
+        totalPages = parseInt(inputNum);
+    }
+    
+    // Validasi akhir jumlah halaman
     if (isNaN(totalPages) || totalPages <= 0) return;
 
     try {
-        // 3. Manipulasi URL (Mengganti Halaman & Memaksa Resolusi HD)
+        // ==========================================
+        // 3. MANIPULASI URL (GANTI HALAMAN & AUTO-HD)
+        // ==========================================
         let baseUrl = rawUrl.replace(/page=\d+/, 'page=__PAGE__');
         if (!baseUrl.includes('page=__PAGE__')) {
             let separator = baseUrl.includes('?') ? '&' : '?';
             baseUrl += separator + 'page=__PAGE__';
         }
         
-        // --- FITUR BARU: Auto-HD ---
-        // Jika URL adalah thumbnail (misal w=240), paksa menjadi lebar 2500px agar PDF tajam
+        // Memaksa resolusi tinggi untuk PDF yang tajam
         if (baseUrl.includes('w=')) {
             baseUrl = baseUrl.replace(/w=\d+/, 'w=2500');
         } else {
-            // Jika tidak ada parameter width, tambahkan untuk berjaga-jaga
             baseUrl += '&w=2500';
         }
 
-        // 4. Membuat CSS Khusus untuk Mode Print (Save as PDF)
+        // ==========================================
+        // 4. INJEKSI CSS MODE PRINT (SAVE AS PDF)
+        // ==========================================
         let printStyle = document.createElement('style');
         printStyle.id = 'gdrive-print-style';
         
@@ -72,7 +114,9 @@
         printStyle.appendChild(document.createTextNode(cssRules));
         document.head.appendChild(printStyle);
 
-        // 5. Membuat Layar Overlay
+        // ==========================================
+        // 5. MEMBANGUN ANTARMUKA (OVERLAY UI)
+        // ==========================================
         let overlay = document.createElement('div');
         overlay.id = 'gdrive-extractor-overlay';
         overlay.style.position = 'fixed';
@@ -88,7 +132,7 @@
         overlay.style.fontFamily = 'Segoe UI, Tahoma, sans-serif';
         overlay.style.textAlign = 'center';
 
-        // 6. Membuat Tombol Simpan PDF
+        // Tombol Simpan PDF
         let pdfBtn = document.createElement('button');
         pdfBtn.textContent = "📄 Simpan sebagai PDF";
         pdfBtn.className = "no-print";
@@ -106,7 +150,7 @@
         pdfBtn.onclick = function() { window.print(); };
         overlay.appendChild(pdfBtn);
 
-        // 7. Membuat Tombol Tutup
+        // Tombol Tutup Tampilan
         let closeBtn = document.createElement('button');
         closeBtn.textContent = "✕ Tutup Tampilan";
         closeBtn.className = "no-print";
@@ -129,15 +173,17 @@
         };
         overlay.appendChild(closeBtn);
 
-        // Membuat Judul Layar
+        // Judul Utama
         let title = document.createElement('h2');
-        title.textContent = "Hasil Ekstraksi Halaman Dokumen";
+        title.textContent = `Hasil Ekstraksi Dokumen (${totalPages} Halaman)`;
         title.className = "no-print";
         title.style.color = '#333';
         title.style.marginBottom = '40px';
         overlay.appendChild(title);
 
-        // 8. Proses melakukan perulangan Gambar
+        // ==========================================
+        // 6. LOOPING PERENDERAN HALAMAN GAMBAR
+        // ==========================================
         for (let i = 0; i < totalPages; i++) {
             let pageUrl = baseUrl.replace('__PAGE__', i);
             
